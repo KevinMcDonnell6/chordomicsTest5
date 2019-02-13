@@ -7,4 +7,4 @@
 launchApp <- function(){
   shiny::shinyApp(server = ChordshinyAppServer, ui = ChordshinyAppUI)
 }
-launchApp()
+

@@ -1,5 +1,6 @@
 # df <- readr::read_tsv("new.faa.emapper.annotations",col_names = F)
-
+#' @export
+#' 
 Cog_from_emapper <- function(df){
   
   df$COG <- ""
