@@ -1,3 +1,4 @@
+#' @export
 # 
 # getwd()
 # categories <- readr::read_tsv("COG_data/cognames2003-2014.tab")
