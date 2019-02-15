@@ -48,7 +48,7 @@ ChordshinyAppUI <- shiny::fluidPage(
                  #verbatimTextOutput("summary"),
                  shiny::actionButton('reset',"Reset",class = "rightAlign"),
                  # uiOutput("CPlot"),
-                 shiny::htmlOutput("test"),
+                 shiny::htmlOutput("SelectedGroupName"),
                  chorddiag::chorddiagOutput("ChordPlot",width="850px",height="850px")#,
                  
                )

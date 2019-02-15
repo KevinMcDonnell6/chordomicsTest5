@@ -1,3 +1,4 @@
+#' @export
 # 
 # df1 <- read.csv("day1R1.csv",stringsAsFactors = F)
 # getwd()
@@ -5,7 +6,7 @@
 
 Get_COG <- function(df,UniprotColumn){
   len <- nrow(df)
-  
+  # df <- data.frame(lapply(df,as.character),stringsAsFactors = F)
   # df_tax <- data.frame(SuperKingdom=character(),Kingdom=character(),Phylum=character(),
   #                      Class=character(),Order=character(),
   #                      Family=character(),Genus=character(),
@@ -23,7 +24,7 @@ Get_COG <- function(df,UniprotColumn){
     setTxtProgressBar(pb, i)
     # i<-1
     
-    UniprotIDs <- stringr::str_trim(unlist(strsplit(df_cog[i,"Uniprot"],",")))
+    UniprotIDs <- stringr::str_trim(unlist(strsplit(as.character(df_cog[i,"Uniprot"]),",")))
     for(j in UniprotIDs)
     
       {

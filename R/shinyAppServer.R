@@ -7,6 +7,7 @@ ChordshinyAppServer <- function(input, output) {
   
   #################################################################
   
+  # Reactive to store name of files
   file_name <- shiny::reactive({
     inFile <- input$files
     numberOfFiles <- length(input$files$datapath)
@@ -22,28 +23,33 @@ ChordshinyAppServer <- function(input, output) {
     return(names_)
   })
   
-  
+  # Assigning file names to an output
   output$myFileNames <- shiny::renderText({ file_name() })
   
-  
+  # Create reactive value Group
+  # This will hold the selcted group the user chooses to look at
   Group <- shiny::reactiveVal(NULL)
   
+  # When Group is selected, assign name to Group (groupSelection comes from JS)
   shiny::observeEvent(input$groupSelection,{
     Group(input$groupSelection)
   })
   
+  # Initialse empty place holder for "Others" category
   others <- shiny::reactiveVal(character(0))
   
-  output$test <- shiny::renderText({
+  # If group selected show their name
+  output$SelectedGroupName <- shiny::renderText({
     shiny::req(Group())
     return(paste("<b>Selected:</b> ",Group()))})
   
+  # If reset button pressed reset Group reactive value
   shiny::observeEvent(input$reset,{
     Group(NULL)
     
   })
   
-  
+  # 
   Data <- shiny::reactive({
     shiny::req(input$files)    
     # validate(
@@ -92,9 +98,10 @@ ChordshinyAppServer <- function(input, output) {
   output$tbl2 = DT::renderDT(
     DT::datatable(data.frame(Data=c("All",file_name())),
                   selection = list(mode="single", selected=1),
-                  options = list(sDom  = '<"top">rt<"bottom">i')
-    ),
-    options = list(lengthChange = FALSE)
+                  options = list(sDom  = '<"top">rt<"bottom">i',
+                                 lengthChange = FALSE)
+    )
+    #,    options = list(lengthChange = FALSE)
   )
   
   # create table of taxonomic ranks
@@ -102,18 +109,20 @@ ChordshinyAppServer <- function(input, output) {
   output$tbl = DT::renderDT(
     DT::datatable(data.frame("Taxonomy"=taxa_ranks()),#c("Kingdom","Phylum","Class","Order","Family","Genus","Species")),
               selection = list(mode="single", selected=1),
-              options = list(sDom  = '<"top">rt<"bottom">i')
-    ),
-    options = list(lengthChange = FALSE)
+              options = list(sDom  = '<"top">rt<"bottom">i',
+                             lengthChange = FALSE)
+    )
+    #,    options = list(lengthChange = FALSE)
   )
   
   
   output$tbl3 = DT::renderDT(
     DT::datatable(data.frame("Function"=functionSelection()),#c("Group Function","Predicted Function")),
               selection = list(mode="single", selected=1),
-              options = list(sDom  = '<"top">rt<"bottom">i')
-    ),
-    options = list(lengthChange = FALSE)
+              options = list(sDom  = '<"top">rt<"bottom">i',
+                             lengthChange = FALSE)
+    )
+    #,    options = list(lengthChange = FALSE)
   )
   
   
@@ -243,8 +252,35 @@ ChordshinyAppServer <- function(input, output) {
     all_df_sums <- list()
     for(i in 2:length(Data())){
       name <- paste("df",i-1,"sum",sep = "")
-      temp <- data.frame(taxa=stringr::str_trim(as.character(Data()[[i]][,taxa])),
-                         Predicted.Function = stringr::str_trim(as.character(Data()[[i]][,functionSelection()[f]])),
+      
+      ##########################
+      #Update: Pre-process data as above given selcetion
+      Data.holder <- Data()[[i]]
+      Data.holder[,taxa_ranks()[s]] <- (stringr::str_trim(as.character(Data()[[i]][,taxa_ranks()[s]])))
+      Predicted.Function.holder <- stringr::str_trim(as.character(Data.holder[,functionSelection()[f]]))
+      
+      # Update: Change data.holder according to selection
+      if(!is.null(Group()) && Group() %in% c("Other")){
+        
+        Data.holder <- Data.holder[Data.holder[,functionSelection()[f]] %in% others(),]
+        Predicted.Function.holder <- stringr::str_trim(as.character(Data.holder[,functionSelection()[f]]))
+        
+      }
+      
+      
+      # Update: Change data.holder according to selection
+      else if(!is.null(Group()) &&  Group() %in% unique(table1$group.function)){
+        
+        Data.holder <- Data.holder[Data.holder[,functionSelection()[f]]==input$groupSelection,]
+        Predicted.Function.holder <- stringr::str_trim(as.character(Data.holder$predicted.function))
+        
+      }
+      
+      ######################
+      #Update: Use data.holder and predicted.function.holder to be consistent with earlier preprocessiing
+      
+      temp <- data.frame(taxa=Data.holder[,taxa],#taxa=stringr::str_trim(as.character(table1[,taxa])),#stringr::str_trim(as.character(Data()[[i]][,taxa])),
+                         Predicted.Function = Predicted.Function.holder,#Predicted.Function.holder,#stringr::str_trim(as.character(table1[,functionSelection()[f]])),#stringr::str_trim(as.character(Data()[[i]][,functionSelection()[f]])),
                          stringsAsFactors = F) %>%
         dplyr::group_by(taxa, Predicted.Function) %>% dplyr::summarise(N = n())
       temp$N <- as.numeric(temp$N)
@@ -351,10 +387,14 @@ ChordshinyAppServer <- function(input, output) {
     
     
     ###########################################
+    # Update: Order names based off of ordered group sums
+    x <- unique(df_group_fun$Predicted.Function)
     
-    x <- unique(mat_list$state)
+    y<- unique(df_group_tax$taxa)
     
-    y<- unique(mat_list$entity)
+    # x <- unique(mat_list$state)
+    
+    # y<- unique(mat_list$entity)
     
     # create zero matrix of the dimensions of the functions and taxa
     m_1 <- matrix(0,nrow = length(y),ncol=length(x),dimnames = list(y,x))
