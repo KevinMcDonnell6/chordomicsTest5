@@ -6,7 +6,7 @@ ChordshinyAppServer <- function(input, output) {
   #################################################################
   
   #################################################################
-  
+  #################### Get file names #######################
   # Reactive to store name of files
   file_name <- shiny::reactive({
     inFile <- input$files
@@ -23,33 +23,12 @@ ChordshinyAppServer <- function(input, output) {
     return(names_)
   })
   
-  # Assigning file names to an output
-  output$myFileNames <- shiny::renderText({ file_name() })
   
-  # Create reactive value Group
-  # This will hold the selcted group the user chooses to look at
-  Group <- shiny::reactiveVal(NULL)
+  taxonomicRanksList <- c("Superkingdom","Kingdom","Phylum","Class","Order","Family","Genus","Species")
   
-  # When Group is selected, assign name to Group (groupSelection comes from JS)
-  shiny::observeEvent(input$groupSelection,{
-    Group(input$groupSelection)
-  })
+ ######################### Dataset upload ######################### 
   
-  # Initialse empty place holder for "Others" category
-  others <- shiny::reactiveVal(character(0))
-  
-  # If group selected show their name
-  output$SelectedGroupName <- shiny::renderText({
-    shiny::req(Group())
-    return(paste("<b>Selected:</b> ",Group()))})
-  
-  # If reset button pressed reset Group reactive value
-  shiny::observeEvent(input$reset,{
-    Group(NULL)
-    
-  })
-  
-  # 
+  # Reactive to store the Data as a list
   Data <- shiny::reactive({
     shiny::req(input$files)    
     # validate(
@@ -57,6 +36,8 @@ ChordshinyAppServer <- function(input, output) {
     # )
     Data <- list(All=data.frame())
     numberOfFiles <- length(input$files$datapath)
+    
+    # Loop through the datasets, loading successive ones into a list
     for(i in 1:numberOfFiles){
       name_ <- paste("df",i,sep = "")
       assign(name_, read.csv(input$files$datapath[i]))
@@ -66,7 +47,18 @@ ChordshinyAppServer <- function(input, output) {
       if(!is.null(Data[[name_]]$group.function)){
         Data[[name_]]$group.function[Data[[name_]]$group.function == ""] <- "No COG"
       }
+      if(!is.null(Data[[name_]]$predicted.function)){
+        Data[[name_]]$predicted.function[Data[[name_]]$predicted.function == ""] <- "No COG"
+      }
       
+      # Need to review!!
+      Data[[name_]][,intersect(colnames(Data[[name_]]),
+                               taxonomicRanksList)][is.na(Data[[name_]][,intersect(colnames(Data[[name_]]),
+                                                                                   taxonomicRanksList)])]<-"No taxonomy"
+      
+      
+      
+      # Create dataset a concatenation of all the files
       if(i==1){
         Data[["All"]] <- as.data.frame(Data[[name_]])
       }
@@ -77,24 +69,79 @@ ChordshinyAppServer <- function(input, output) {
     
     return(Data)
   })
+
+  ###########################################################################  
   
   
+  ###################### Reactive Function and Phylogeny getters#############
   
+  # Reactive to hold all taxonomic ranks in the dataset
   taxa_ranks <- shiny::reactive({
     col_names <- colnames(Data()[[1]])
     Ranks=c("Superkingdom","Kingdom","Phylum","Class","Order","Family","Genus","Species")
     return(intersect(col_names,Ranks))
   })
   
+  # Reactive to hold function levels
   functionSelection <- shiny::reactive({
     col_names <- colnames(Data()[[1]])
     names_ <- c("group.function","predicted.function")
     return(intersect(names_,col_names))
   })
   
-  #################################################################
-  # Selectection Tables for plot
   
+  ##################################################  
+    
+  
+  # Assigning file names to an output
+  output$myFileNames <- shiny::renderText({ file_name() })
+  
+  # Create reactive value Group
+  # This will hold the selcted group the user chooses to look at
+  Group <- shiny::reactiveVal(NULL)
+  Grouptaxa <- shiny::reactiveVal(NULL)
+  previoustaxa <- shiny::reactiveVal(NULL)
+  previousrank <- shiny::reactiveVal(NULL)
+  previousrankholder <- shiny::reactiveVal(NULL)
+  
+  # When Group is selected, assign name to Group (groupSelection comes from JS)
+  shiny::observeEvent(input$groupSelection,{
+    Group(input$groupSelection)
+  })
+  
+  # When Group is selected, assign name to Group (groupSelection comes from JS)
+  shiny::observeEvent(input$grouptaxaSelection,{
+    Grouptaxa(input$grouptaxaSelection)
+    if(is.null(Grouptaxa()) || Grouptaxa()!= "Other Taxa"){
+      previousrank(taxa_ranks()[input$tbl_rows_selected])
+      previoustaxa(Grouptaxa())
+    }
+    
+  })
+  
+  # Initialse empty place holder for "Others" category
+  others <- shiny::reactiveVal(character(0))
+  
+  # Initialse empty place holder for "Others" category
+  othertaxa <- shiny::reactiveVal(character(0))
+  
+  # If group selected show their name
+  output$SelectedGroupName <- shiny::renderText({
+    shiny::req(Group())
+    return(paste("<b>Selected Function:</b> ",Group()))})
+  
+  # If group selected show their name
+  output$SelectedGrouptaxaName <- shiny::renderText({
+    shiny::req(previoustaxa())
+    return(paste("<b>Selected Taxa:</b> ",previousrank(),"-",previoustaxa()))})
+  
+ 
+  
+
+  #################################################################
+  ############# Selection Tables for plot ####################
+  
+  # Dataset selection table, defualt is All
   output$tbl2 = DT::renderDT(
     DT::datatable(data.frame(Data=c("All",file_name())),
                   selection = list(mode="single", selected=1),
@@ -104,8 +151,8 @@ ChordshinyAppServer <- function(input, output) {
     #,    options = list(lengthChange = FALSE)
   )
   
-  # create table of taxonomic ranks
   
+  # Taxonomic rank selection table
   output$tbl = DT::renderDT(
     DT::datatable(data.frame("Taxonomy"=taxa_ranks()),#c("Kingdom","Phylum","Class","Order","Family","Genus","Species")),
               selection = list(mode="single", selected=1),
@@ -115,7 +162,7 @@ ChordshinyAppServer <- function(input, output) {
     #,    options = list(lengthChange = FALSE)
   )
   
-  
+  # Function level selection table
   output$tbl3 = DT::renderDT(
     DT::datatable(data.frame("Function"=functionSelection()),#c("Group Function","Predicted Function")),
               selection = list(mode="single", selected=1),
@@ -128,6 +175,16 @@ ChordshinyAppServer <- function(input, output) {
   
   ##################################################################
   
+  ################ Reset button ######################
+  shiny::observeEvent(input$reset,{
+    Group(NULL)
+    Grouptaxa(NULL)
+    previoustaxa(NULL)
+    previousrank(taxa_ranks()[input$tbl_rows_selected])
+    previousrankholder(NULL)
+  }) 
+  
+  ######################################
   # function to create array of colours
   
   #getPalette = grDevices::colorRampPalette(brewer.pal(9, "Set1"))
@@ -135,12 +192,15 @@ ChordshinyAppServer <- function(input, output) {
   ##################################################################
   
   
-  
+  # reactive containg code to create plot
   Cplot <- shiny::reactive({
     numberOfFiles <- length(input$files$datapath)
     
+    # selected dataset
     d<- input$tbl2_rows_selected
+    shiny::req(d)
     
+    # Assign selected datasets
     table1 <- as.data.frame(Data()[[d]])
     
     # level of selected taxonomic rank
@@ -149,18 +209,24 @@ ChordshinyAppServer <- function(input, output) {
     # level of function resolution
     f <- input$tbl3_rows_selected
     
-    
+    # Update function and phylogeny selection
     table1[,taxa_ranks()[s]] <- as.factor(stringr::str_trim(as.character(table1[,taxa_ranks()[s]])))
+   
+    if(!is.null(previoustaxa())){
+      table1 <- table1[table1[,previousrank()] %in% previoustaxa(),]
+      
+    }
+    
     table1$Predicted.Function <- as.factor(stringr::str_trim(as.character(table1[,functionSelection()[f]])))
     
-    
+    # If "other" functions are sected update the dataset
     if(!is.null(Group()) && Group() %in% c("Other")){
       
       table1 <- table1[table1[,functionSelection()[f]] %in% others(),]
       
     }
     
-    
+    # If one of the functional groups is selected update to higher resolution
     else if(!is.null(Group()) &&  Group() %in% unique(table1$group.function)){
       
       table1 <- table1[table1[,functionSelection()[f]]==input$groupSelection,]
@@ -170,67 +236,108 @@ ChordshinyAppServer <- function(input, output) {
     
     else { Group(NULL)}
     
+    
+    ##################### Taxonomy if Statements ################
+    
+    if(!is.null(Grouptaxa()) && Grouptaxa() %in% c("Other Taxa") && all(othertaxa() %in% unique(table1[,taxa_ranks()[s]]))){
+      
+      table1 <- table1[table1[,taxa_ranks()[s]] %in% othertaxa(),]
+      # Predicted.Function.holder <- stringr::str_trim(as.character(Data.holder[,functionSelection()[f]]))
+      
+    }
+    
+    
+    # Update: Change data.holder according to selection
+    else if(!is.null(Grouptaxa()) &&  Grouptaxa() %in% unique(table1[,taxa_ranks()[s]])){
+      
+      
+      table1 <- table1[table1[,taxa_ranks()[s]]==input$grouptaxaSelection,]
+      # Predicted.Function.holder <- stringr::str_trim(as.character(Data.holder$predicted.function))
+      
+    }else{ Grouptaxa(NULL)}
+    
+   ########################################### 
     # extract functions and taxonomy from dataset
-    chord_table <- data.frame(state=table1[,"Predicted.Function"],entity=table1[,taxa_ranks()[s]])#Lowest.Common.Ancestor
+    chord_table <- data.frame(functionCol=table1[,"Predicted.Function"],taxonomy=table1[,taxa_ranks()[s]])#Lowest.Common.Ancestor
     
     # encode NA's as factors
-    chord_table$state <- addNA(chord_table$state)
-    levels(chord_table$state)[is.na(levels(chord_table$state))]<- "N/A"
-    chord_table[is.na(chord_table$state),"state"] <- "N/A"
+    chord_table$functionCol <- addNA(chord_table$functionCol)
+    levels(chord_table$functionCol)[is.na(levels(chord_table$functionCol))]<- "N/A"
+    chord_table[is.na(chord_table$functionCol),"functionCol"] <- "N/A"
     
     # remove NA's from analysis
-    chord_table2<- chord_table[chord_table$state!=""&chord_table$state!="N/A",]
+    chord_table2<- chord_table[chord_table$functionCol!=""&chord_table$functionCol!="N/A",]
     
     # ensure functions are factors
-    chord_table3 <- data.frame("state" = as.factor(as.character(chord_table2$state)),
-                               "entity"=as.factor(as.character(chord_table2$entity)))
+    chord_table3 <- data.frame("functionCol" = as.factor(as.character(chord_table2$functionCol)),
+                               "taxonomy"=as.factor(as.character(chord_table2$taxonomy)))
     
     # covert dataframe to tibble
     tib <- tibble::as_data_frame(chord_table3)
     
     # summarise the tibble
-    mat_list<- tib %>% dplyr::group_by(entity,state) %>% dplyr::summarise(n=n())
+    mat_list<- tib %>% dplyr::group_by(taxonomy,functionCol) %>% dplyr::summarise(n=n())
     
     #########################################
     #NEW
     
     # Set those below threshold to "Other"
-    Sum_state <- mat_list %>% dplyr::group_by(state) %>% dplyr::summarise(N=sum(n))
-    Sum_entity <- mat_list %>% dplyr::group_by(entity) %>% dplyr::summarise(N=sum(n))
+    Sum_state <- mat_list %>% dplyr::group_by(functionCol) %>% dplyr::summarise(N=sum(n))
+    Sum_entity <- mat_list %>% dplyr::group_by(taxonomy) %>% dplyr::summarise(N=sum(n))
     
     threshold <- 0.02
+    funcThreshold <- ifelse(!is.null(Group()) && Group()=="Other",0,threshold)
+    taxThreshold <- ifelse(!is.null(Grouptaxa()) && Grouptaxa()=="Other Taxa",0,threshold)
+    # print(!is.null(Group()) && Group()=="Other")
+    # print(!is.null(Grouptaxa()) && Grouptaxa()=="Other Taxa")
     Total_entries <- sum(mat_list$n)
     
     # Change entriess to characters
-    mat_list$state<- as.character(mat_list$state)
+    mat_list$functionCol<- as.character(mat_list$functionCol)
     
+    # Create place holder for "other" functions
     others_holder <- character(0)
     
-    for(i in 1:length(Sum_state$state)){
-      # print(Sum_state$N[i]/Total_entries)
-      if(Sum_state$N[i]/Total_entries < threshold){
-        others_holder <- c(others_holder,as.character(Sum_state$state[i]))
-        mat_list$state[mat_list$state==Sum_state$state[i]]<- "Other"
+    # Check if functions account for less than 2% of data
+    # If yes assign them to "other" and store their name
+    for(i in 1:length(Sum_state$functionCol)){
+      if(Sum_state$N[i]/Total_entries < funcThreshold){
+        others_holder <- c(others_holder,as.character(Sum_state$functionCol[i]))
+        mat_list$functionCol[mat_list$functionCol==Sum_state$functionCol[i]]<- "Other"
       }
     }
     
+    # If group is selcted update others
     if(is.null(Group())){ #&& Group()!="Other"){
       others(others_holder)
       
     }
     
-    mat_list$entity<- as.character(mat_list$entity)
+    # 
+    mat_list$taxonomy<- as.character(mat_list$taxonomy)
     
-    for(i in 1:length(Sum_entity$entity)){
-      # print(Sum_state$N[i]/Total_entries)
-      if(Sum_entity$N[i]/Total_entries < threshold){
-        mat_list$entity[mat_list$entity==Sum_entity$entity[i]]<- "Other Taxa"
+    # Create place holder for "other taxa"
+    othertaxa_holder <- character(0)
+    
+    
+    for(i in 1:length(Sum_entity$taxonomy)){
+      
+      if(Sum_entity$N[i]/Total_entries < taxThreshold){
+        othertaxa_holder <- c(othertaxa_holder,as.character(Sum_entity$taxonomy[i]))
+        mat_list$taxonomy[mat_list$taxonomy==Sum_entity$taxonomy[i]]<- "Other Taxa"
       }
     }
     
-    mat_list$state<- as.factor(mat_list$state)
-    mat_list$entity<- as.factor(mat_list$entity)
-    mat_list <- mat_list %>% dplyr::group_by(entity,state) %>% dplyr::summarise(n=sum(n))
+    # If group is selcted update others
+    if(is.null(Grouptaxa()) || Grouptaxa()!="Other Taxa"){
+      othertaxa(othertaxa_holder)
+      
+    }
+   
+    
+    mat_list$functionCol<- as.factor(mat_list$functionCol)
+    mat_list$taxonomy<- as.factor(mat_list$taxonomy)
+    mat_list <- mat_list %>% dplyr::group_by(taxonomy,functionCol) %>% dplyr::summarise(n=sum(n))
     
     
     # End New
@@ -240,7 +347,7 @@ ChordshinyAppServer <- function(input, output) {
     
     # More new
     
-    
+    if(d==1 & numberOfFiles>1){
     
     # reactor data for bar charts
     taxa <- taxa_ranks()[s]
@@ -257,6 +364,12 @@ ChordshinyAppServer <- function(input, output) {
       #Update: Pre-process data as above given selcetion
       Data.holder <- Data()[[i]]
       Data.holder[,taxa_ranks()[s]] <- (stringr::str_trim(as.character(Data()[[i]][,taxa_ranks()[s]])))
+      
+      if(!is.null(previoustaxa())){
+        Data.holder <- Data.holder[Data.holder[,previousrank()]%in%previoustaxa(),]
+        
+      }
+      
       Predicted.Function.holder <- stringr::str_trim(as.character(Data.holder[,functionSelection()[f]]))
       
       # Update: Change data.holder according to selection
@@ -276,6 +389,33 @@ ChordshinyAppServer <- function(input, output) {
         
       }
       
+      ############# Taxonomy Selection ##################
+      # Update: Change data.holder according to selection
+      if(!is.null(Grouptaxa()) && Grouptaxa() %in% c("Other Taxa") && all(othertaxa() %in% unique(table1[,taxa_ranks()[s]]))){
+        
+        Data.holder <- Data.holder[Data.holder[,taxa_ranks()[s]] %in% othertaxa(),]
+        if(!is.null(Group()) &&  Group() %in% unique(table1$group.function)){
+          Predicted.Function.holder <- stringr::str_trim(as.character(Data.holder$predicted.function))
+          
+        }else{
+        Predicted.Function.holder <- stringr::str_trim(as.character(Data.holder[,functionSelection()[f]]))
+        }
+      }
+      
+      
+      # Update: Change data.holder according to selection
+      else if(!is.null(Grouptaxa()) &&  Grouptaxa() %in% unique(table1[,taxa_ranks()[s]])){
+        
+        
+        Data.holder <- Data.holder[Data.holder[,taxa_ranks()[s]]==input$grouptaxaSelection,]
+        if(!is.null(Group()) &&  Group() %in% unique(table1$group.function)){
+          Predicted.Function.holder <- stringr::str_trim(as.character(Data.holder$predicted.function))
+          
+        }else{
+        Predicted.Function.holder <- stringr::str_trim(as.character(Data.holder[,functionSelection()[f]]))
+        }
+      }
+      
       ######################
       #Update: Use data.holder and predicted.function.holder to be consistent with earlier preprocessiing
       
@@ -289,7 +429,7 @@ ChordshinyAppServer <- function(input, output) {
       all_df_sums[[i-1]] <- get(name)
     }
     
-    all_df_sums_join <- Reduce(dplyr::full_join,all_df_sums)
+    all_df_sums_join <- suppressMessages(Reduce(dplyr::full_join,all_df_sums))
     
     all_df_sums_join <- all_df_sums_join %>% replace(is.na(.), 0)
     all_df_sums_join$SUM <- rowSums(all_df_sums_join[,c(3:(length(Data())+1))])
@@ -302,16 +442,16 @@ ChordshinyAppServer <- function(input, output) {
     Sum_fun <- all_df_sums_join %>% dplyr::group_by(Predicted.Function) %>% dplyr::summarise(N=sum(SUM))
     Sum_taxa <- all_df_sums_join %>% dplyr::group_by(taxa) %>% dplyr::summarise(N=sum(SUM))
     
-    threshold <- 0.02
+    # threshold <- 0.02
     Total_entries <- sum(all_df_sums_join$SUM)
     
-    all_df_sums_join <- Reduce(dplyr::full_join,all_df_sums)
+    all_df_sums_join <- suppressMessages(Reduce(dplyr::full_join,all_df_sums))
     
     all_df_sums_join <- all_df_sums_join %>% replace(is.na(.), 0)
     
     for(i in 1:length(Sum_fun$Predicted.Function)){
       
-      if(Sum_fun$N[i]/Total_entries < threshold){
+      if(Sum_fun$N[i]/Total_entries < funcThreshold){
         all_df_sums_join$Predicted.Function[all_df_sums_join$Predicted.Function == Sum_fun$Predicted.Function[i]] <- "Other"
       }
     }
@@ -319,7 +459,7 @@ ChordshinyAppServer <- function(input, output) {
     
     for(i in 1:length(Sum_taxa$taxa)){
       
-      if(Sum_taxa$N[i]/Total_entries < threshold){
+      if(Sum_taxa$N[i]/Total_entries < taxThreshold){
         all_df_sums_join$taxa[all_df_sums_join$taxa==Sum_taxa$taxa[i]]<- "Other Taxa"
       }
     }
@@ -367,7 +507,7 @@ ChordshinyAppServer <- function(input, output) {
     
     exportJson <- jsonlite::toJSON(l)
     
-    
+    }
     if(d!=1 | numberOfFiles==1){exportJson<-NULL
     Group_sum <- NULL}
     # 
@@ -379,23 +519,26 @@ ChordshinyAppServer <- function(input, output) {
     
     
     
-    mat_list_groupFun <- mat_list %>% dplyr::group_by(state) %>% dplyr::summarise(N=sum(n)) %>% dplyr::arrange(dplyr::desc(N))
+    mat_list_groupFun <- mat_list %>% dplyr::group_by(functionCol) %>% dplyr::summarise(N=sum(n)) %>% dplyr::arrange(dplyr::desc(N))
     
-    mat_list_groupTaxa <- mat_list %>% dplyr::group_by(entity) %>% dplyr::summarise(N=sum(n)) %>% dplyr::arrange(dplyr::desc(N))
+    mat_list_groupTaxa <- mat_list %>% dplyr::group_by(taxonomy) %>% dplyr::summarise(N=sum(n)) %>% dplyr::arrange(dplyr::desc(N))
     
-    mat_list <- mat_list %>% dplyr::arrange(match(entity,mat_list_groupTaxa$entity),match(state,mat_list_groupFun$state))
+    mat_list <- mat_list %>% dplyr::arrange(match(taxonomy,mat_list_groupTaxa$taxonomy),match(functionCol,mat_list_groupFun$functionCol))
     
     
     ###########################################
     # Update: Order names based off of ordered group sums
-    x <- unique(df_group_fun$Predicted.Function)
-    
-    y<- unique(df_group_tax$taxa)
-    
-    # x <- unique(mat_list$state)
-    
-    # y<- unique(mat_list$entity)
-    
+    if(d==1 & numberOfFiles>1){
+      x <- unique(df_group_fun$Predicted.Function)
+      
+      y<- unique(df_group_tax$taxa)
+      
+     
+    }else{
+      x <- unique(mat_list$functionCol)
+      
+      y<- unique(mat_list$taxonomy)
+    }
     # create zero matrix of the dimensions of the functions and taxa
     m_1 <- matrix(0,nrow = length(y),ncol=length(x),dimnames = list(y,x))
     
@@ -419,7 +562,7 @@ ChordshinyAppServer <- function(input, output) {
                             # categoryNames = T,
                             categorynamePadding = 200,
                             ticklabelFontsize = 10,
-                            tickInterval = 5,
+                            tickInterval = max(1,sum(mat_list$n)%/%200),
                             margin = 400-input$margin,
                             reactor = exportJson,
                             grouptotals = Group_sum,

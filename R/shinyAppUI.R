@@ -1,5 +1,9 @@
 ChordshinyAppUI <- shiny::fluidPage(
-  shiny::tags$head(shiny::tags$style(".rightAlign{float:right;}")),
+  shiny::tags$head(shiny::tags$style(".rightAlign{float:right;}
+                       .shiny-notification{position:fixed;
+                                     top: calc(50%);;
+                                     left: calc(50%);;
+                                     }")),
   # Application title
   # titlePanel("CircosPro"),
   shiny::tabsetPanel(
@@ -49,7 +53,8 @@ ChordshinyAppUI <- shiny::fluidPage(
                  shiny::actionButton('reset',"Reset",class = "rightAlign"),
                  # uiOutput("CPlot"),
                  shiny::htmlOutput("SelectedGroupName"),
-                 chorddiag::chorddiagOutput("ChordPlot",width="850px",height="850px")#,
+                 shiny::htmlOutput("SelectedGrouptaxaName"),
+                 chorddiag::chorddiagOutput("ChordPlot",width="850px",height="1000px")#,
                  
                )
              )
